@@ -25,13 +25,18 @@ import java.util.Set;
 public class Game extends AbstractGame {
 
 	private static final Random RAND = new Random();
-	private TestEngine engine;
-	private Mat4i matrix;
-
 	private static final int SPRITE_SIZE = 64;
 	private static final int PADDING = 10;
+	private static final int BORDER = 2;
+
+	private boolean gameOver = false;
+	private int points = 0;
+	private TestEngine engine;
+
+	private Mat4i matrix;
 
 	private static final Map<Integer, Sprite> sprites = Maps.newHashMap();
+	private static final Sprite BG_SPRITE = new Sprite(SPRITE_SIZE+BORDER*2, SPRITE_SIZE+BORDER*2, 0xFF000000);
 
 	static {
 		for (int[] i : new int[][]{{0, 0xFF444444}, {2, 0xFF110000}, {4, 0xFF330000}, {8, 0xFF550000}, {16, 0xFF770000}, {32, 0xFF990000}, {64, 0xFFBB0000}, {128, 0xFFDD0000}, {256, 0xFFFF0000}, {512, 0xFFFF2200}, {1024, 0xFFFF4400}, {2048, 0xFFFF6600}}) {
@@ -52,9 +57,11 @@ public class Game extends AbstractGame {
 		resetMatrix();
 	}
 
-	private void resetMatrix() {
+	public void resetMatrix() {
 		matrix = Mat4i.empty();
 		matrix.set(RAND.nextInt(4), RAND.nextInt(4), RAND.nextInt(100) < 75 ? 2 : 4);
+		gameOver = false;
+		points = 0;
 	}
 
 	@Override
@@ -62,10 +69,10 @@ public class Game extends AbstractGame {
 		super.onRender();
 		IRender r = this.engine.getRender();
 		r.draw(0, 0, new Sprite(800, 600, 0xFFff9999));
-		//r.draw(0, 0, new Sprite(getCoord(4), getCoord(4), 0xFF000000));
 
 		for (int y = 0; y < 4; y++) {
 			for (int x = 0; x < 4; x++) {
+				r.draw(getCoord(x)-BORDER, getCoord(y)-BORDER, BG_SPRITE);
 				r.draw(getCoord(x), getCoord(y), getSprite(y, x));
 			}
 		}
@@ -113,6 +120,8 @@ public class Game extends AbstractGame {
 			resetMatrix();
 		}
 
+		if(gameOver) return;
+
 		if (ih.wasKeyTyped(KeyEvent.VK_LEFT) || ih.wasKeyTyped(KeyEvent.VK_A)) {
 			move(Dir.LEFT);
 		} else if (ih.wasKeyTyped(KeyEvent.VK_RIGHT) || ih.wasKeyTyped(KeyEvent.VK_D)) {
@@ -124,7 +133,7 @@ public class Game extends AbstractGame {
 		}
 	}
 
-	private void move(Dir dir) {
+	public boolean move(Dir dir) {
 		boolean changed = true;
 		boolean someChanged = false;
 
@@ -139,6 +148,7 @@ public class Game extends AbstractGame {
 						changed = true;
 					} else if (!fused.contains(new Vec2i(x, y)) && !fused.contains(new Vec2i(x + dir.x, y + dir.y)) && matrix.get(x, y) != 0 && matrix.get(x + dir.x, y + dir.y) == matrix.get(x, y)) {
 						matrix.set(x + dir.x, y + dir.y, matrix.get(x, y) * 2);
+						points += matrix.get(x + dir.x, y + dir.y);
 						matrix.set(x, y, 0);
 						changed = true;
 						fused.add(new Vec2i(x, y));
@@ -154,12 +164,20 @@ public class Game extends AbstractGame {
 			}
 		}
 		if (free.size() == 0) {
-			JOptionPane.showMessageDialog(null, "HAS PERDIDO!", "GAME OVER", JOptionPane.ERROR_MESSAGE);
-			resetMatrix();
+			gameOver = true;
 		} else if (someChanged) {
 			Vec2i v = free.get(RAND.nextInt(free.size()));
 			matrix.set(v.x, v.y, RAND.nextInt(100) < 75 ? 2 : 4);
 		}
+		return someChanged;
+	}
+
+	public boolean isGameOver() {
+		return gameOver;
+	}
+
+	public int getPoints() {
+		return points;
 	}
 
 	@Override
@@ -167,7 +185,7 @@ public class Game extends AbstractGame {
 		return "2048";
 	}
 
-	private enum Dir {
+	public enum Dir {
 		LEFT(-1, 0, 1, 0, 1, 1), RIGHT(1, 0, 2, 0, -1, 1), DOWN(0, 1, 0, 2, 1, -1), UP(0, -1, 0, 1, 1, 1);
 		public final int x, y, fx, fy, dx, dy;
 
