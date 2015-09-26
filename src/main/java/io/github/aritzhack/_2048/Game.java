@@ -28,6 +28,9 @@ public class Game extends AbstractGame {
 	private static final int SPRITE_SIZE = 64;
 	private static final int PADDING = 10;
 	private static final int BORDER = 2;
+	private final boolean messageOnGameOver;
+	private final boolean animated;
+	private final Map<Vec2i, Animation> animations = Maps.newHashMap();
 
 	private boolean gameOver = false;
 	private int points = 0;
@@ -49,10 +52,12 @@ public class Game extends AbstractGame {
 	}
 
 	public static void main(String[] args) {
-		new Game();
+		new Game(true, true);
 	}
 
-	public Game() {
+	public Game(boolean messageOnGameOver, boolean animated) {
+		this.messageOnGameOver = messageOnGameOver;
+		this.animated = animated;
 		engine = new TestEngine(this, getCoord(4), getCoord(4));
 		resetMatrix();
 	}
@@ -72,10 +77,27 @@ public class Game extends AbstractGame {
 
 		for (int y = 0; y < 4; y++) {
 			for (int x = 0; x < 4; x++) {
-				r.draw(getCoord(x)-BORDER, getCoord(y)-BORDER, BG_SPRITE);
+				if(animations.containsKey(new Vec2i(x, y))) {
+					r.draw(getCoord(x) - BORDER, getCoord(y) - BORDER, BG_SPRITE);
+					r.draw(getCoord(x), getCoord(y), sprites.get(0));
+					continue;
+				}
+				r.draw(getCoord(x) - BORDER, getCoord(y) - BORDER, BG_SPRITE);
 				r.draw(getCoord(x), getCoord(y), getSprite(y, x));
 			}
 		}
+
+		Set<Vec2i> done = Sets.newHashSet();
+		for(Map.Entry<Vec2i, Animation> a : animations.entrySet()) {
+			if(a.getValue().isDone()) done.add(a.getKey());
+			else {
+				final Vec2i pos = a.getValue().getPosition();
+				final int v = a.getValue().getValue();
+				r.draw(pos.x - BORDER, pos.y - BORDER, BG_SPRITE);
+				r.draw(pos.x, pos.y, sprites.containsKey(v) ? sprites.get(v) : sprites.get(0));
+			}
+		}
+		for (Vec2i d : done) animations.remove(d);
 	}
 
 	@Override
@@ -88,18 +110,24 @@ public class Game extends AbstractGame {
 
 		for (int y = 0; y < 4; y++) {
 			for (int x = 0; x < 4; x++) {
+				if(animations.containsKey(new Vec2i(x, y))) continue;
 				int v = matrix.get(x, y);
 				if (v != 0) {
 					drawCenteredString(String.valueOf(v), g, getCoord(x) + SPRITE_SIZE / 2, getCoord(y) + SPRITE_SIZE / 2);
 				}
 			}
 		}
+
+		for(Map.Entry<Vec2i, Animation> a : animations.entrySet()) {
+			final Vec2i pos = a.getValue().getPosition();
+			final int v = a.getValue().getValue();
+			drawCenteredString(String.valueOf(v), g, pos.x + SPRITE_SIZE / 2,pos.y + SPRITE_SIZE / 2);
+		}
 	}
 
 	private void drawCenteredString(String s, Graphics g, int x, int y) {
 		FontMetrics fm = g.getFontMetrics();
-		Rectangle2D bounds = fm.getStringBounds(s, g);
-		g.drawString(s, (int) (x - bounds.getWidth() / 2), y + fm.getAscent() - (fm.getAscent() + fm.getDescent()) / 2);
+		g.drawString(s, (int) (x - fm.getStringBounds(s, g).getWidth() / 2), y + fm.getAscent() - (fm.getAscent() + fm.getDescent()) / 2);
 	}
 
 	private Sprite getSprite(int y, int x) {
@@ -118,6 +146,12 @@ public class Game extends AbstractGame {
 
 		if (ih.wasKeyTyped(KeyEvent.VK_R)) {
 			resetMatrix();
+		}
+
+		if(animations.size() > 0) {
+			for (Animation a : animations.values()) {
+				a.update();
+			}
 		}
 
 		if(gameOver) return;
@@ -143,15 +177,17 @@ public class Game extends AbstractGame {
 			for (int x = dir.fx; 0 <= x && x < 4; x += dir.dx) {
 				for (int y = dir.fy; 0 <= y && y < 4; y += dir.dy) {
 					if (matrix.get(x, y) != 0 && matrix.get(x + dir.x, y + dir.y) == 0) {
+						if(animated) animations.put(new Vec2i(x + dir.x, y + dir.y), new Animation(getCoord(x), getCoord(y), getCoord(x + dir.x), getCoord(y + dir.y), matrix.get(x, y)));
 						matrix.set(x + dir.x, y + dir.y, matrix.get(x, y));
 						matrix.set(x, y, 0);
 						changed = true;
 					} else if (!fused.contains(new Vec2i(x, y)) && !fused.contains(new Vec2i(x + dir.x, y + dir.y)) && matrix.get(x, y) != 0 && matrix.get(x + dir.x, y + dir.y) == matrix.get(x, y)) {
+						if(animated) animations.put(new Vec2i(x + dir.x, y + dir.y), new Animation(getCoord(x), getCoord(y), getCoord(x + dir.x), getCoord(y + dir.y), matrix.get(x, y)));
 						matrix.set(x + dir.x, y + dir.y, matrix.get(x, y) * 2);
 						points += matrix.get(x + dir.x, y + dir.y);
 						matrix.set(x, y, 0);
 						changed = true;
-						fused.add(new Vec2i(x, y));
+						fused.add(new Vec2i(x+dir.x, y+dir.y));
 					}
 				}
 			}
@@ -165,11 +201,19 @@ public class Game extends AbstractGame {
 		}
 		if (free.size() == 0) {
 			gameOver = true;
+			if(messageOnGameOver) {
+				JOptionPane.showMessageDialog(null, "GAME OVER! YOU GOT " + points + " POINTS!", "GAME OVER!", JOptionPane.ERROR_MESSAGE);
+				resetMatrix();
+			}
 		} else if (someChanged) {
 			Vec2i v = free.get(RAND.nextInt(free.size()));
 			matrix.set(v.x, v.y, RAND.nextInt(100) < 75 ? 2 : 4);
 		}
 		return someChanged;
+	}
+
+	public void destroy() {
+		this.engine.getEngine().stop();
 	}
 
 	public boolean isGameOver() {

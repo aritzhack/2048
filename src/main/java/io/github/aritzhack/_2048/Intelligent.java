@@ -19,10 +19,12 @@ public class Intelligent {
     }
 
     public Intelligent() {
-        game = new Game();
+        game = new Game(false, false);
 
         //strategy1();
         strategy2();
+
+        game.destroy();
     }
 
     private void strategy1() {
